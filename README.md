@@ -4,6 +4,8 @@
 ![Python](https://img.shields.io/badge/Python-3.11-blue.svg)
 ![PyTorch](https://img.shields.io/badge/DeepLearning-PyTorch-red.svg)
 ![FastAPI](https://img.shields.io/badge/API-FastAPI-green.svg)
+![Airflow](https://img.shields.io/badge/Workflow-Apache%20Airflow-blue)
+![MLOps](https://img.shields.io/badge/MLOps-MLFlow-orange)
 ![Green Energy](https://img.shields.io/badge/Status-Green%20Energy-success)
 
 ---
