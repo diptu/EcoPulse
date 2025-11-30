@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Database
     DATABASE_URL: Optional[str] = None
     OPENELECTRICITY_API_KEY: Optional[str] = None
+    BATCH_SIZE: int = 100
 
     # Pydantic v2 config
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
