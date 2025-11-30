@@ -12,6 +12,9 @@ def import_all_models():
     Dummy function to ensure all models are imported before table creation.
     Import each model here if needed to guarantee registration with Base.
     """
-    import app.models.upload  # noqa: F401
+    import app.models.facility  # noqa: F401
+    import app.models.facility_timeseries  # noqa: F401
+    import app.models.market  # noqa: F401
+    import app.models.network  # noqa: F401
 
     # add other models as needed

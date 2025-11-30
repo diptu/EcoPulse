@@ -2,8 +2,7 @@ import asyncio
 
 from airflow.decorators import dag, task
 from airflow.utils.dates import days_ago
-
-from app.etl.run_etl import run_etl
+from etl.sync_hourly import run_etl
 
 
 @dag(

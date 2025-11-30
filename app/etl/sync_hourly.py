@@ -1,8 +1,9 @@
 import asyncio
 
+from etl.extract import extract_facility_data, transform_facility_data
+from etl.transform import load_facilities, update_facilities
+
 from app.db.session import async_session
-from app.etl.common import extract_facility_data, transform_facility_data
-from app.etl.loader import load_facilities, update_facilities
 
 
 async def run_etl():
