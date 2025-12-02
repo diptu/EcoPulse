@@ -11,6 +11,7 @@ from app.schemas.facility import FacilityCreate
 def serialize_unit(unit: Any) -> Dict[str, Any]:
     """
     Convert unit object to JSON-serializable dict.
+    (This function remains here as it's imported by extract.py)
     """
     unit_dict = {}
     for key, value in vars(unit).items():
@@ -33,49 +34,31 @@ def make_hashable(value: Any) -> Any:
 
 
 def transform_facilities(
-    raw_facilities: List[Any], csv_path: str = "transformed_facilities.csv"
+    serialized_facilities: List[Dict[str, Any]],
+    csv_path: str = "transformed_facilities.csv",
 ) -> List[Dict[str, Any]]:
     """
-    - Convert raw OEClient data → validated FacilityCreate schemas
-    - Remove exact duplicates (all fields)
-    - Save final transformed list to CSV file
-    - Return list of dicts (JSON-serializable) for Airflow XCom
+    - Takes JSON-serializable dicts from XCom (pre-transformed in extract).
+    - Validates dicts against FacilityCreate schemas (Core Transform).
+    - Removes exact duplicates (all fields).
+    - Saves final transformed list to CSV file.
+    - Returns list of dicts (JSON-serializable) for Airflow XCom.
     """
     transformed: List[Dict[str, Any]] = []
     seen_rows = set()
     skipped_count = 0
 
-    for fac in raw_facilities:
-        fac_dict = vars(fac)
-
-        # Extract coordinates
-        loc = fac_dict.get("location")
-        latitude = getattr(loc, "lat", None) if loc else None
-        longitude = getattr(loc, "lng", None) if loc else None
-
-        # JSON-serializable units
-        units_list = [serialize_unit(u) for u in getattr(fac, "units", [])]
-
-        raw_row = {
-            "code": fac_dict.get("code"),
-            "name": fac_dict.get("name"),
-            "network_id": fac_dict.get("network_id"),
-            "network_region": fac_dict.get("network_region"),
-            "description": fac_dict.get("description"),
-            "npi_id": fac_dict.get("npi_id"),
-            "latitude": latitude,
-            "longitude": longitude,
-            "units": units_list,
-        }
-
-        # Pydantic validation
+    # 1. Validation and Deduplication
+    for raw_row in serialized_facilities:
+        # Pydantic validation: Ensure data conforms to the schema
         try:
+            # The .dict() output is used for validation and subsequent steps
             validated = FacilityCreate(**raw_row).dict()
         except ValidationError as e:
             print(f"[WARNING] Invalid Facility (code={raw_row.get('code')}):\n{e}\n")
             continue
 
-        # Deduplication hash
+        # Deduplication hash: Ensures exact record duplicates are dropped
         row_hashable = tuple(
             sorted((k, make_hashable(v)) for k, v in validated.items())
         )
@@ -84,20 +67,25 @@ def transform_facilities(
             continue
 
         seen_rows.add(row_hashable)
+        # 'transformed' contains validated, deduplicated dictionaries with 'units' as a list
         transformed.append(validated)
 
-    # --- CSV SAVE SECTION ---
+    # 2. CSV SAVE SECTION (Side Effect)
     if transformed:
-        fieldnames = list(transformed[0].keys())
+        # Create a deep copy for CSV export to prevent mutation of the 'transformed' list
+        # intended for XCom/Load step.
+        csv_export_list = [dict(obj) for obj in transformed]
+        fieldnames = list(csv_export_list[0].keys())
 
-        # Convert units list → JSON string for CSV
-        for obj in transformed:
+        # Convert units list → JSON string for CSV file
+        for obj in csv_export_list:
+            # Mutate the units column ONLY in the CSV list
             obj["units"] = json.dumps(obj["units"], ensure_ascii=False)
 
         with open(csv_path, "w", newline="", encoding="utf-8") as f:
             writer = csv.DictWriter(f, fieldnames=fieldnames)
             writer.writeheader()
-            writer.writerows(transformed)
+            writer.writerows(csv_export_list)
 
         print(f"[INFO] Saved transformed facilities to CSV → {csv_path}")
         if skipped_count > 0:
@@ -105,4 +93,7 @@ def transform_facilities(
                 f"[INFO] Skipped {skipped_count} duplicate facilities during transform"
             )
 
+    # 3. Return Deduplicated, Non-Mutated Data
+    # 'transformed' contains the clean, deduplicated list with 'units' as a list of dicts,
+    # ready for the 'load' step.
     return transformed
