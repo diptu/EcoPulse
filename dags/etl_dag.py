@@ -4,8 +4,7 @@ import os
 from datetime import datetime, timedelta
 from typing import Optional
 
-from airflow.sdk.dag import dag
-from airflow.sdk.task import task
+from airflow.decorators import dag, task
 
 from app.core.config import settings
 from app.db.session import get_sync_db
@@ -77,9 +76,9 @@ def facility_etl_monthly_pipeline():
         return raw_data
 
     @task()
-    def transform(raw_data):
+    def transform(raw_facilities: list) -> list:
         print("🔹 Transforming facilities...")
-        transformed = transform_facilities(raw_data)
+        transformed = transform_facilities(raw_facilities)
         print(f"✅ Transformed {len(transformed)} facilities")
         return transformed
 

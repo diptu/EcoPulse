@@ -28,6 +28,8 @@ def run_etl():
     # 3. Load (Batch Upsert)
     # -------------------------------
     inserted_total = 0
+    updated_total = 0
+    skiped_total = 0
 
     # 1. Manually create the generator object
     db_generator = get_sync_db()
@@ -39,10 +41,16 @@ def run_etl():
         batch = transformed[i : i + BATCH_SIZE]
 
         # Perform upsert
-        load_facilities(batch, db, batch_size=BATCH_SIZE)
-        inserted_total += len(batch)
+        total_inserted, total_updated, total_skipped = load_facilities(
+            batch, db, batch_size=BATCH_SIZE
+        )
+        inserted_total += total_inserted
+        updated_total += total_updated
+        skiped_total += total_skipped
 
-    print(f"✅ ETL job completed. Total processed: {inserted_total}")
+    print(
+        f"✅ ETL job completed. Total inserted: {inserted_total}, updated: {updated_total}, skipped: {skiped_total} "
+    )
 
     # Task instantiation
     print("🌏 Starting ETL job...")

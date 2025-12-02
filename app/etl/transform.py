@@ -39,9 +39,11 @@ def transform_facilities(
     - Convert raw OEClient data → validated FacilityCreate schemas
     - Remove exact duplicates (all fields)
     - Save final transformed list to CSV file
+    - Return list of dicts (JSON-serializable) for Airflow XCom
     """
     transformed: List[Dict[str, Any]] = []
     seen_rows = set()
+    skipped_count = 0
 
     for fac in raw_facilities:
         fac_dict = vars(fac)
@@ -78,6 +80,7 @@ def transform_facilities(
             sorted((k, make_hashable(v)) for k, v in validated.items())
         )
         if row_hashable in seen_rows:
+            skipped_count += 1
             continue
 
         seen_rows.add(row_hashable)
@@ -97,5 +100,9 @@ def transform_facilities(
             writer.writerows(transformed)
 
         print(f"[INFO] Saved transformed facilities to CSV → {csv_path}")
+        if skipped_count > 0:
+            print(
+                f"[INFO] Skipped {skipped_count} duplicate facilities during transform"
+            )
 
     return transformed
