@@ -1,44 +1,48 @@
-import asyncio
+import logging
 import os
-import sys
-from typing import Any, List
+from typing import Any, List, Optional
 
 # -------------------------------
-# Load API key from settings
+# Configuration / API Key Setup
 # -------------------------------
+API_KEY: Optional[str] = os.environ.get("OPENELECTRICITY_API_KEY")
 try:
-    from app.core.config import settings
+    if not API_KEY:
+        from app.core.config import settings
 
-    API_KEY = settings.OPENELECTRICITY_API_KEY
+        API_KEY = getattr(settings, "OPENELECTRICITY_API_KEY", None)
 except ImportError:
-    API_KEY = os.environ.get("OPENELECTRICITY_API_KEY")
+    pass
 
-if not API_KEY:
-    print(
-        "\n❌ OPENELECTRICITY_API_KEY is missing! Set it as an environment variable or in config.\n"
-    )
-    sys.exit(1)
+# Make API_KEY available as env var (empty string if missing)
+os.environ["OPENELECTRICITY_API_KEY"] = API_KEY or ""
 
-os.environ["OPENELECTRICITY_API_KEY"] = API_KEY
-
-# ------------------------------------------------------------------------------
-# Async OEClient Imports
-# ------------------------------------------------------------------------------
-from openelectricity import AsyncOEClient
+# -------------------------------
+# Imports
+# -------------------------------
+from openelectricity import OEClient
 from openelectricity.client import APIError
 from openelectricity.types import UnitFueltechType, UnitStatusType
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
-async def fetch_facilities_single(
-    client: AsyncOEClient,
+logging.getLogger("openelectricity.client").setLevel(logging.ERROR)
+
+
+# -------------------------------
+# Synchronous Fetch
+# -------------------------------
+def fetch_facilities_single(
+    client: OEClient,
     network_id: str,
     status_ids: list[UnitStatusType],
     fueltech_id: UnitFueltechType,
 ) -> List[Any]:
-    """Fetch facilities for a single network/fueltech combination, skip 403."""
+    """Fetch facilities synchronously for a single network/fueltech combination."""
     print(f"  -> Fetching: {network_id} | {fueltech_id.value}")
     try:
-        response = await client.get_facilities(
+        response = client.get_facilities(
             network_id=[network_id],
             status_id=status_ids,
             fueltech_id=[fueltech_id],
@@ -47,14 +51,20 @@ async def fetch_facilities_single(
     except APIError as e:
         status_code = getattr(e, "status_code", None) or (e.args[0] if e.args else None)
         if status_code == 403:
-            print(f"⚠️ Skipping {network_id} | {fueltech_id.value} (403 Forbidden)")
+            print(f"⚠️ Skipping {network_id} | {fueltech_id.value} (**403 Forbidden**)")
             return []
         print(f"❌ API Error {status_code} for {network_id} | {fueltech_id.value}: {e}")
         return []
 
 
-async def extract_facilities() -> List[Any]:
-    """Fetch all facilities from all networks/fueltech combinations asynchronously."""
+def extract_facilities() -> List[Any]:
+    """Fetch all facilities synchronously using OEClient."""
+    if not API_KEY:
+        raise ValueError(
+            "❌ OPENELECTRICITY_API_KEY is missing! "
+            "Set it as an environment variable or in settings."
+        )
+
     networks = ["NEM", "WEM"]
     status_ids = [UnitStatusType.OPERATING]
     fueltech_ids = [
@@ -75,19 +85,22 @@ async def extract_facilities() -> List[Any]:
 
     all_facilities: List[Any] = []
 
-    async with AsyncOEClient() as client:
-        tasks = []
+    with OEClient() as client:
         for network in networks:
             for fueltech in fueltech_ids:
-                tasks.append(
+                all_facilities.extend(
                     fetch_facilities_single(client, network, status_ids, fueltech)
                 )
 
-        # Run all requests concurrently
-        results = await asyncio.gather(*tasks)
-
-        # Flatten the list of lists
-        for fac_list in results:
-            all_facilities.extend(fac_list)
-
     return all_facilities
+
+
+# -------------------------------
+# Example Usage (Optional)
+# -------------------------------
+if __name__ == "__main__":
+    try:
+        facilities = extract_facilities()
+        # print(f"Fetched {len(facilities)} facilities")
+    except ValueError as e:
+        print(e)

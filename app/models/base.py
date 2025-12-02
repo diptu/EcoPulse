@@ -37,14 +37,3 @@ class BaseModel(Base):
         onupdate=func.now(),
         nullable=False,
     )
-
-    created_by = Column(
-        TIMESTAMP(timezone=True),
-        default=func.now(),
-    )
-
-    updated_by = Column(
-        TIMESTAMP(timezone=True),
-        default=func.now(),
-        onupdate=func.now(),
-    )

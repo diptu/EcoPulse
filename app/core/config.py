@@ -20,6 +20,7 @@ class Settings(BaseSettings):
 
     # Database
     DATABASE_URL: Optional[str] = None
+    SYNC_DATABASE_URL: Optional[str] = None
     OPENELECTRICITY_API_KEY: Optional[str] = None
     BATCH_SIZE: int = 100
 

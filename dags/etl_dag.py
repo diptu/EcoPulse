@@ -1,52 +1,127 @@
-# dags/etl_dag.py
-from datetime import timedelta
+# dags/etl_monthly.py
+import logging
+import os
+from datetime import datetime, timedelta
+from typing import Optional
 
-from airflow import DAG
-from airflow.decorators import task  # noqa: F401
-from airflow.operators.python import PythonOperator
-from airflow.utils.dates import days_ago
+from airflow.sdk.dag import dag
+from airflow.sdk.task import task
 
-API_CONECTION_ID = "opnenem"
+from app.core.config import settings
+from app.db.session import get_sync_db
+from app.etl.extract import extract_facilities
+from app.etl.load import load_facilities
+from app.etl.transform import transform_facilities
 
+BATCH_SIZE = settings.BATCH_SIZE
+# -------------------------------
+# Logging
+# -------------------------------
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.INFO)
 
+# -------------------------------
+# Configuration
+# -------------------------------
+START_DATE = datetime(2025, 1, 1)
 default_args = {
-    "owner": "astro",
-    "start_date": days_ago(1),
+    "owner": "data_engineer",
+    "start_date": START_DATE,
     "retries": 1,
     "retry_delay": timedelta(minutes=5),
 }
 
-with DAG(
-    dag_id="opennem_etl_pipeline",
+# Retrieve API key safely
+API_KEY: Optional[str] = os.environ.get("OPENELECTRICITY_API_KEY")
+try:
+    if not API_KEY:
+        from app.core.config import settings
+
+        API_KEY = getattr(settings, "OPENELECTRICITY_API_KEY", None)
+except ImportError:
+    pass
+
+# Make it available for tasks
+os.environ["OPENELECTRICITY_API_KEY"] = API_KEY or ""
+
+# --- Import your ETL logic ---
+# Ensure these are installed in your Airflow environment
+# from app.etl.extract import extract_facilities
+
+
+# -------------------------------
+# DAG Definition
+# -------------------------------
+@dag(
+    dag_id="facility_pipeline_monthly",
     default_args=default_args,
-    schedule_interval="@hourly",  # run every hour
+    schedule="@monthly",
     catchup=False,
-    tags=["opennem", "etl"],
-) as dag:
+    tags=["opennem", "facilities"],
+    doc_md=__doc__,
+)
+def facility_etl_monthly_pipeline():
+    """
+    Monthly ETL pipeline for OpenElectricity facility data.
+    """
+
     @task()
-    def extract_data():
-        
-   
+    def extract():
+        """
+        Runs the extraction function.
+        """
 
-# default_args = {
-#     "owner": "astro",
-#     "depends_on_past": False,
-#     "email_on_failure": False,
-#     "email_on_retry": False,
-#     "retries": 1,
-#     "retry_delay": timedelta(minutes=5),
-# }
+        logger.info("🔹 Extracting raw facilities from OpenElectricity API...")
+        raw_data = extract_facilities()
+        print(f"Fetched {len(raw_data)} facilities")
+        return raw_data
 
-# with DAG(
-#     dag_id="open_electricity_etl",
-#     default_args=default_args,
-#     start_date=datetime(2025, 11, 29),
-#     schedule_interval="@hourly",  # run every hour
-#     catchup=False,
-#     tags=["openelectricity", "etl"],
-# ) as dag:
-#     run_etl_task = PythonOperator(
-#         task_id="run_openelectricity_etl", python_callable=run_etl_sync
-#     )
+    @task()
+    def transform(raw_data):
+        print("🔹 Transforming facilities...")
+        transformed = transform_facilities(raw_data)
+        print(f"✅ Transformed {len(transformed)} facilities")
+        return transformed
 
-#     run_etl_task
+    @task()
+    def load(transformed):
+        inserted_total = 0
+
+        # 1. Manually create the generator object
+        db_generator = get_sync_db()
+        # 2. Extract the single yielded Session object
+        # This executes the generator up to the 'yield db' line.
+        db = next(db_generator)
+        total = len(transformed)
+        for i in range(0, total, BATCH_SIZE):
+            batch = transformed[i : i + BATCH_SIZE]
+
+            # Perform upsert
+            load_facilities(batch, db, batch_size=BATCH_SIZE)
+            inserted_total += len(batch)
+
+        print(f"✅ ETL job completed. Total processed: {inserted_total}")
+
+    # Task instantiation
+    print("🌏 Starting ETL job...")
+
+    # -------------------------------
+    # 1. Extract
+    # -------------------------------
+
+    raw_data = extract()
+
+    # -------------------------------
+    # 2. Transform
+    # -------------------------------
+
+    transformed = transform(raw_data)
+
+    # -------------------------------
+    # 3. Load (Batch Upsert)
+    # -------------------------------
+    load(transformed)
+
+
+# Instantiate DAG object for Airflow
+etl_dag = facility_etl_monthly_pipeline()

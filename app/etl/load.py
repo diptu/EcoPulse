@@ -1,107 +1,103 @@
 import logging
-from typing import Any, Dict, List
+from datetime import datetime
 
-from sqlalchemy import select
-from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy import select, tuple_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.facility import Facility
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.INFO)
 
 
-def make_hashable(value: Any) -> Any:
-    """Convert lists/dicts recursively to tuples for hashing."""
+def make_hashable(value):
+    """
+    Recursively convert lists/dicts to tuples for hashing.
+    """
     if isinstance(value, list):
         return tuple(make_hashable(v) for v in value)
-    if isinstance(value, dict):
+    elif isinstance(value, dict):
         return tuple(sorted((k, make_hashable(v)) for k, v in value.items()))
     return value
 
 
-def row_signature(row: Dict[str, Any]) -> tuple:
-    """Hashable signature for detecting exact duplicates based on content (excluding timestamps)."""
-    keys = [
-        "code",
-        "name",
-        "network_id",
-        "network_region",
-        "description",
-        "npi_id",
-        "latitude",
-        "longitude",
-        "units",
-    ]
-    return tuple((k, make_hashable(row.get(k))) for k in keys)
+def load_facilities(facilities: list[dict], db: AsyncSession, batch_size: int = 100):
+    """
+    Insert or update facilities in batches.
+    1. Skip exact duplicates (all columns except created_at/updated_at)
+    2. Update existing row if code, name, network_id, network_region match but other columns differ
+    """
+    total = len(facilities)
+    logger.info(f"[LOAD] Processing {total} facilities...")
 
+    for i in range(0, total, batch_size):
+        batch = facilities[i : i + batch_size]
 
-async def load_facilities(
-    batch: List[Dict[str, Any]], db: AsyncSession, batch_size: int = 100
-):
-    if not batch:
-        return
+        # Deduplicate exact rows in Python
+        def row_hash(row):
+            return tuple(
+                sorted(
+                    (k, make_hashable(v))
+                    for k, v in row.items()
+                    if k not in ("created_at", "updated_at")
+                )
+            )
 
-    inserted_count = 0
-    updated_count = 0
-    duplicate_count = 0
+        seen_hashes = set()
+        unique_batch = []
+        for row in batch:
+            h = row_hash(row)
+            if h not in seen_hashes:
+                seen_hashes.add(h)
+                unique_batch.append(row)
 
-    # Remove exact duplicates within batch
-    seen_rows = set()
-    unique_batch = []
-    for row in batch:
-        sig = row_signature(row)
-        if sig in seen_rows:
-            duplicate_count += 1
-            continue
-        seen_rows.add(sig)
-        unique_batch.append(row)
+        # Fetch existing rows that match code, name, network_id, network_region
+        key_tuples = [
+            (row["code"], row["name"], row["network_id"], row.get("network_region"))
+            for row in unique_batch
+        ]
 
-    if not unique_batch:
-        logger.info("All rows are duplicates within batch. Nothing to insert/update.")
-        return
-
-    # Pre-fetch existing facilities with all columns
-    stmt = select(Facility)
-    result = await db.execute(stmt)
-    existing_facilities = result.scalars().all()
-
-    # Build set of existing row signatures
-    existing_signatures = {
-        row_signature(
-            {
-                "code": f.code,
-                "name": f.name,
-                "network_id": f.network_id,
-                "network_region": f.network_region,
-                "description": f.description,
-                "npi_id": f.npi_id,
-                "latitude": f.latitude,
-                "longitude": f.longitude,
-                "units": f.units,
-            }
+        existing_rows = (
+            db.execute(
+                select(Facility).filter(
+                    tuple_(
+                        Facility.code,
+                        Facility.name,
+                        Facility.network_id,
+                        Facility.network_region,
+                    ).in_(key_tuples)
+                )
+            )
+            .scalars()
+            .all()
         )
-        for f in existing_facilities
-    }
 
-    # Split batch into insert vs update
-    to_insert = []
-    to_update = []
-    for row in unique_batch:
-        sig = row_signature(row)
-        if sig in existing_signatures:
-            duplicate_count += 1
-        else:
-            # If same code+region exists but content differs, insert new row
-            to_insert.append(row)
+        # Map existing rows by key tuple
+        existing_map = {}
+        for fac in existing_rows:
+            key = (fac.code, fac.name, fac.network_id, fac.network_region)
+            existing_map[key] = fac
 
-    # Insert new rows
-    if to_insert:
-        stmt = insert(Facility).values(to_insert)
-        await db.execute(stmt)
-        await db.commit()
-        inserted_count = len(to_insert)
+        # Upsert
+        for row in unique_batch:
+            key = (
+                row["code"],
+                row["name"],
+                row["network_id"],
+                row.get("network_region"),
+            )
+            existing = existing_map.get(key)
 
-    logger.info(
-        f"Inserted: {inserted_count}, Duplicates skipped (within batch & DB): {duplicate_count}"
-    )
+            if existing:
+                # Check if any other column differs, if yes update
+                updated = False
+                for col in ["description", "npi_id", "latitude", "longitude", "units"]:
+                    if getattr(existing, col) != row.get(col):
+                        setattr(existing, col, row.get(col))
+                        updated = True
+                if updated:
+                    existing.updated_at = datetime.utcnow()
+            else:
+                db.add(Facility(**row))
+
+        db.commit()
+        logger.info(f"[LOAD] Batch {i // batch_size + 1} processed.")

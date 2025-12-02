@@ -64,6 +64,10 @@ The repo is designed as part of the **CarbonIQ Analytics Pipeline** to manage th
 - Set up PostgreSQL, optional Redis cache  
 - Define event types (`DataNormalized`, `EmissionsCalculated`, etc.)
 
+### Phase 0.1: ETL Pipeline
+- Using Airflow, Postgresql create ETL pileline
+- Intigrate DBT to this pipeline
+
 ### Phase 1: CO₂e Estimation Pipeline
 - **Fetch Grid Intensity:** Integrate OpenNEM API  
 - **Tariff Lookup:** Map $ → kWh using user bills + tariff tables  

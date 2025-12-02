@@ -5,6 +5,7 @@ from pydantic import BaseModel
 
 
 class FacilityBase(BaseModel):
+    code: str
     name: str
     network_id: str
     network_region: Optional[str] = None
