@@ -1,4 +1,5 @@
 # app/etl/facility_timeseries_etl.py
+import logging
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Tuple
 
@@ -12,6 +13,12 @@ from app.models.facility import Facility
 from app.models.facility_timeseries import FacilityTimeseries
 from app.schemas.facility_timeseries import FacilityTimeseriesCreate
 
+# -------------------------------
+# Logging Configuration
+# -------------------------------
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+
 
 class FacilityTimeseriesETL(BaseETL):
     def __init__(
@@ -20,7 +27,7 @@ class FacilityTimeseriesETL(BaseETL):
         start_time: datetime = None,
         end_time: datetime = None,
         interval: str = "1h",
-        num_facility: int = 10,  # batch size for facility_codes
+        num_facility: int = 20,  # batch size for facility_code
     ):
         super().__init__(start_time=start_time, end_time=end_time, interval=interval)
         self.db = db
@@ -36,26 +43,25 @@ class FacilityTimeseriesETL(BaseETL):
         self.schema_class = FacilityTimeseriesCreate
 
         # Fetch facility codes from DB
-        self.facility_codes: List[str] = self._get_facility_codes()
+        self.facility_code: List[str] = self._get_facility_code()
+        logger.info(f"✅ Initialized ETL for {len(self.facility_code)} facilities.")
 
-    def _get_facility_codes(self) -> List[str]:
+    def _get_facility_code(self) -> List[str]:
         facilities = (
-            self.db.query(Facility.code)
-            .order_by(Facility.id)
-            .limit(1000)  # adjust as needed
-            .all()
+            self.db.query(Facility.code).order_by(Facility.id).limit(1000).all()
         )
+        logger.info(f"✅ Fetched {len(facilities)} facility codes from DB.")
         return [f[0] for f in facilities]
 
     def extract(self) -> List[Dict[str, Any]]:
         all_rows: List[Dict[str, Any]] = []
 
-        for i in range(0, len(self.facility_codes), self.num_facility):
-            batch_codes = self.facility_codes[i : i + self.num_facility]
+        for i in range(0, len(self.facility_code), self.num_facility):
+            batch_codes = self.facility_code[i : i + self.num_facility]
             params = {
                 "interval": self.interval,
-                "date_start": self.start_time,
-                "date_end": self.end_time,
+                "date_start": self.start_time.replace(tzinfo=None),
+                "date_end": self.end_time.replace(tzinfo=None),
             }
 
             with OEClient() as client:
@@ -86,7 +92,9 @@ class FacilityTimeseriesETL(BaseETL):
                             for point in result.data:
                                 all_rows.append(
                                     {
-                                        "timestamp": point.timestamp,
+                                        "timestamp": point.timestamp.isoformat()
+                                        if point.timestamp
+                                        else None,  # ✅ JSON-serializable
                                         "metric": metric_val,
                                         "unit": series.unit,
                                         "facility_code": facility_code,
@@ -96,35 +104,67 @@ class FacilityTimeseriesETL(BaseETL):
                                         "value": point.value,
                                     }
                                 )
-                    print(
+                    logger.info(
                         f"✅ Fetched batch {i // self.num_facility + 1} "
                         f"({len(batch_codes)} facilities)"
                     )
-                except Exception as e:
-                    print(f"❌ Failed to fetch batch {i // self.num_facility + 1}: {e}")
 
+                except Exception as e:
+                    logger.error(
+                        f"❌ Failed to fetch batch {i // self.num_facility + 1}: {e}"
+                    )
+                    code = getattr(e, "status_code", None)
+                    if code == 400:
+                        raise ValueError(
+                            "400 Bad Request - Malformed parameters or chunk size too big."
+                        )
+                    elif code == 401:
+                        raise PermissionError(
+                            f"401 Unauthorized - Missing or invalid API key. Details: {e}"
+                        )
+                    elif code == 403:
+                        raise PermissionError(
+                            f"403 Forbidden - Insufficient permissions. Details: {e}"
+                        )
+                    elif code == 422:
+                        raise ValueError(
+                            f"422 Validation Error - Invalid input parameters. Details: {e}"
+                        )
+                    elif code == 500:
+                        raise RuntimeError(
+                            f"500 Internal Server Error - Server-side error. Details: {e}"
+                        )
+                    else:
+                        raise RuntimeError(
+                            f"❌ Unknown error fetching batch {i // self.num_facility + 1}: {e}"
+                        )
+
+        logger.info(f"✅ Total extracted rows: {len(all_rows)}")
         return all_rows
 
     def transform(self, rows: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        return super().transform(
+        logger.info(f"🔹 Transforming {len(rows)} rows...")
+        # Convert timestamp strings back to datetime
+        for row in rows:
+            if "timestamp" in row and isinstance(row["timestamp"], str):
+                row["timestamp"] = datetime.fromisoformat(row["timestamp"])
+
+        transformed = super().transform(
             rows,
             schema=self.schema_class,
             csv_path="transformed_facility_timeseries.csv",
         )
+        logger.info(f"✅ Transformed rows: {len(transformed)}")
+        return transformed
 
     def load(
         self, rows: List[Dict[str, Any]], db: Session, batch_size: int = 100
     ) -> Tuple[int, int, int]:
-        """
-        Load rows into DB, skipping duplicates and returning counts:
-        (inserted, updated, skipped)
-        """
         inserted_total, updated_total, skipped_total = 0, 0, 0
 
+        logger.info(f"💾 Loading {len(rows)} rows into DB...")
         for i in range(0, len(rows), batch_size):
             batch = rows[i : i + batch_size]
-
-            # Build insert statement with ON CONFLICT DO NOTHING
             stmt = insert(self.model_class).values(batch)
             stmt = stmt.on_conflict_do_nothing(
                 index_elements=["timestamp", "facility_code"]
@@ -136,8 +176,7 @@ class FacilityTimeseriesETL(BaseETL):
             inserted_total += result.rowcount or 0
             skipped_total += len(batch) - (result.rowcount or 0)
 
-        print(
-            f"💾 Load Summary: Inserted={inserted_total}, "
-            f"Skipped (duplicates)={skipped_total}"
+        logger.info(
+            f"💾 Load Summary: Inserted={inserted_total}, Skipped={skipped_total}"
         )
         return inserted_total, updated_total, skipped_total

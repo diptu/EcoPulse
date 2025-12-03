@@ -5,8 +5,9 @@ from typing import Optional
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parent.parent.parent  # root dir
 ENV_FILE = BASE_DIR / ".env"
+print(f"ENV_FILE path:{ENV_FILE}")
 
 
 class Settings(BaseSettings):
@@ -23,6 +24,7 @@ class Settings(BaseSettings):
     SYNC_DATABASE_URL: Optional[str] = None
     OPENELECTRICITY_API_KEY: Optional[str] = None
     BATCH_SIZE: int = 100
+    FACILITY_SIZE: int = 25
 
     # Pydantic v2 config
     model_config = SettingsConfigDict(env_file=str(ENV_FILE), extra="ignore")
