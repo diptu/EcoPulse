@@ -1,16 +1,12 @@
 # app/models/market.py
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy import Column, DateTime, Float, String, UniqueConstraint
 
-Base = declarative_base()
+from app.models.base import BaseModel
 
 
-class MarketData(Base):
+class MarketData(BaseModel):
     __tablename__ = "market_data"
-
-    id = Column(Integer, primary_key=True, index=True)
 
     timestamp = Column(DateTime(timezone=True), index=True, nullable=False)
 
@@ -25,4 +21,8 @@ class MarketData(Base):
 
     value = Column(Float, nullable=False)  # numeric values
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint(
+            "timestamp", "metric", "region", name="uq_timestamp_metric_region"
+        ),
+    )

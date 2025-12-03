@@ -17,4 +17,5 @@ def import_all_models():
     import app.models.market  # noqa: F401
     import app.models.network  # noqa: F401
 
+    # import app.models.network  # noqa: F401
     # add other models as needed

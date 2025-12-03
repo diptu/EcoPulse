@@ -8,20 +8,14 @@ from sqlalchemy import create_engine
 
 # Specific imports for Async functionality
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
-
-# -------------------------------
-# Base for models
-# -------------------------------
-# Used by Alembic and for model declaration
-Base = declarative_base()
 
 # ------------------------------------
 # 🚀 Async Database Engine & Session
 # ------------------------------------
-async_engine = create_async_engine(
+engine = create_async_engine(
     settings.DATABASE_URL,  # must be async: postgresql+asyncpg://...
     pool_size=10,
     max_overflow=20,
@@ -35,7 +29,7 @@ async_engine = create_async_engine(
 # **FIXED**: Using top-level 'sessionmaker' imported from 'sqlalchemy.orm'
 # The 'class_=AsyncSession' argument makes it an async session factory.
 async_session_maker = sessionmaker(
-    async_engine,
+    engine,
     expire_on_commit=False,
     class_=AsyncSession,  # This tells the maker to produce AsyncSession objects
 )

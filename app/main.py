@@ -5,6 +5,7 @@ from fastapi.openapi.utils import get_openapi
 
 from app.api.v1.routes import facility_router
 from app.core.config import settings
+from app.db.init_db import import_all_models
 from app.db.session import engine
 from app.models.base import Base
 
@@ -73,9 +74,14 @@ app.include_router(facility_router)  ## place holder
 # -------------------------
 # Create tables on startup
 # -------------------------
+# @app.on_event("startup")
+# async def create_tables():
+#     """Create all database tables asynchronously on app startup."""
+#     async with engine.begin() as conn:
+#         await conn.run_sync(Base.metadata.create_all)
 @app.on_event("startup")
 async def create_tables():
-    """Create all database tables asynchronously on app startup."""
+    import_all_models()  # <-- Ensure models are registered
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
 

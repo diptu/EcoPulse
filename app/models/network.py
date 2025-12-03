@@ -1,16 +1,13 @@
 # app/models/network.py
 
-from sqlalchemy import Column, DateTime, Float, Integer, String
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.sql import func
+from sqlalchemy import Column, DateTime, Float, String, UniqueConstraint
 
-Base = declarative_base()
+from app.models.base import BaseModel
 
 
-class NetworkData(Base):
+class NetworkData(BaseModel):
     __tablename__ = "network_data"
 
-    id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime(timezone=True), index=True, nullable=False)
 
     metric = Column(String, index=True, nullable=False)  # e.g., "power"
@@ -21,4 +18,8 @@ class NetworkData(Base):
 
     value = Column(Float, nullable=False)  # numeric measurement
 
-    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    __table_args__ = (
+        UniqueConstraint(
+            "timestamp", "metric", "name", name="uq_timestamp_metric_name"
+        ),
+    )

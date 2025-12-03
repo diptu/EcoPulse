@@ -1,15 +1,13 @@
 # app/models/facility_timeseries.py
-from sqlalchemy import Column, DateTime, Float, String
-from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy import Column, DateTime, Float, String, UniqueConstraint
 
-Base = declarative_base()
+from app.models.base import BaseModel
 
 
-class FacilityTimeseries(Base):
+class FacilityTimeseries(BaseModel):
     __tablename__ = "facility_timeseries"
 
-    id = Column(String, primary_key=True, index=True)  # UUID recommended
-    timestamp = Column(DateTime, nullable=False, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True)  # local timestamp
     metric = Column(String, nullable=False, index=True)
     unit = Column(String, nullable=False)
     facility_code = Column(String, nullable=False, index=True)
@@ -17,3 +15,11 @@ class FacilityTimeseries(Base):
     fueltech_group = Column(String, nullable=True)
     network_region = Column(String, nullable=True)
     value = Column(Float, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint(
+            "timestamp",
+            "facility_code",
+            name="uq_timestamp_facility_code",
+        ),
+    )
