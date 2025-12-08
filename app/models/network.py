@@ -20,6 +20,9 @@ class NetworkData(BaseModel):
 
     __table_args__ = (
         UniqueConstraint(
-            "timestamp", "metric", "name", name="uq_timestamp_metric_name"
+            "timestamp",
+            "metric",
+            "name",
+            name="uq_timestamp_metric_name",
         ),
     )

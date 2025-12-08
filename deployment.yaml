@@ -1,0 +1,11 @@
+deployment:
+  configuration:
+    name: carboniq
+    executor: CeleryExecutor
+    workspace: transverse-precession-7590
+    env:
+      DATABASE_URL: postgresql+asyncpg://neondb_owner:npg_Z7yUBWPAcEp2@ep-little-mountain-a7t1m1g0-pooler.ap-southeast-2.aws.neon.tech/neondb
+      SYNC_DATABASE_URL: postgresql+psycopg2://neondb_owner:npg_Z7yUBWPAcEp2@ep-little-mountain-a7t1m1g0-pooler.ap-southeast-2.aws.neon.tech/neondb
+      OPENELECTRICITY_API_KEY: oe_3ZYpDmSQYTFXPhFUxB1yCxi3
+      BATCH_SIZE: "100"
+      FACILITY_SIZE: "25"

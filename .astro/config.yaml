@@ -1,2 +1,17 @@
 project:
-    name: eco-pulse
+  name: eco-pulse
+env:
+  - name: OPENELECTRICITY_API_KEY
+    value: "oe_3ZYpDmSQYTFXPhFUxB1yCxi3"
+
+  - name: DATABASE_URL
+    value: "postgresql+asyncpg://neondb_owner:npg_Z7yUBWPAcEp2@ep-little-mountain-a7t1m1g0-pooler.ap-southeast-2.aws.neon.tech/neondb"
+
+  - name: BATCH_SIZE
+    value: "100"
+
+  - name: FACILITY_SIZE
+    value: "25"
+
+  - name: SYNC_DATABASE_URL
+    value: "postgresql+psycopg2://neondb_owner:npg_Z7yUBWPAcEp2@ep-little-mountain-a7t1m1g0-pooler.ap-southeast-2.aws.neon.tech/neondb"

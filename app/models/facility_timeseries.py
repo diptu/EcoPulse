@@ -1,4 +1,5 @@
 # app/models/facility_timeseries.py
+
 from sqlalchemy import Column, DateTime, Float, String, UniqueConstraint
 
 from app.models.base import BaseModel
@@ -7,7 +8,9 @@ from app.models.base import BaseModel
 class FacilityTimeseries(BaseModel):
     __tablename__ = "facility_timeseries"
 
-    timestamp = Column(DateTime, nullable=False, index=True)  # local timestamp
+    timestamp = Column(
+        DateTime(timezone=True), nullable=False, index=True
+    )  # local timestamp
     metric = Column(String, nullable=False, index=True)
     unit = Column(String, nullable=False)
     facility_code = Column(String, nullable=False, index=True)
