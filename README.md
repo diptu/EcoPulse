@@ -68,6 +68,40 @@ The repo is designed as part of the **CarbonIQ Analytics Pipeline** to manage th
 - Using Airflow, Postgresql create ETL pileline
 - Intigrate DBT to this pipeline
 
+# 🚀 Astro Deployment Workflow Guide
+
+This guide explains how to initialize, run, and deploy an Astronomer (Astro) Airflow project using the **Astro CLI**.
+
+---
+
+## 💻 Astro CLI Command Reference
+
+This table provides a quick reference for the essential Astro CLI commands used in the typical deployment workflow.
+
+| Command | Purpose | Notes |
+| :--- | :--- | :--- |
+| `astro init` | Initializes a new Astro project structure (`dags`, `requirements.txt`, etc.) in the current directory. | Run once at the project start. |
+| `astro dev start --wait 3m` | Starts the local Airflow environment (scheduler, webserver, triggerer). | `--wait 3m` ensures components are fully up. |
+| `astro workspace list` | Lists all Astronomer workspaces accessible to the current user. | Helps confirm context before deployment. |
+| `astro deployment list` | Lists all deployments within the current workspace. | Essential for retrieving the `<deployment_id>`. |
+| `astro deploy <deployment_id> -f` | Deploys the local project code to the specified cloud deployment. | `-f` forces the deploy, skipping confirmation. |
+| `astro dev stop` | Stops and tears down the local Airflow environment containers. | Saves local resources when development is paused. |
+
+---
+
+## 📘 Example Workflow
+
+The commands follow a logical progression from local setup to cloud deployment:
+
+1.  **Initialize:** `astro init`
+2.  **Local Development:** `astro dev start --wait 3m`
+3.  **Target Selection:** `astro workspace list` followed by `astro deployment list`
+4.  **Deployment:** `astro deploy <deployment_id> -f`
+
+---
+
+
+
 ### Phase 1: CO₂e Estimation Pipeline
 - **Fetch Grid Intensity:** Integrate OpenNEM API  
 - **Tariff Lookup:** Map $ → kWh using user bills + tariff tables  
